@@ -4,148 +4,198 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A fork of Metrica Sports' "More than a Hack 2027 — Phase 1" starter repo. The task: for every frame
-of the tactical video of FC Barcelona (home, `H`) vs Athletic Club (away, `A`), output who has the
-ball. The output is one CSV, `frame,label`, with exactly **199,319** rows (frames `0..199318`, in
-order). Labels are `H`, `A`, `D` (dead ball), or `X` (abstain/no answer). The board ranks on
-**spellF1** (whole possessions matched by temporal IoU). **macroF1** (per-frame) is the first
-tie-break. The floor to beat is `baseline_smooth50`, full-match spellF1 0.2433.
+This is the user's fork of Metrica Sports' "More than a Hack 2027 — Phase 1" starter repo, plus
+our solution in `possession/`.
 
-The docs are the spec. Read them in this order: `CHALLENGE.md` → `DATA.md` → `EVALUATION.md` →
-`SUBMISSION.md` → `RULES.md` → `FAQ.md`. If the docs and `evaluation/possession_metrics.py`
-disagree, the code wins.
+**The task.** For every frame of the tactical video of FC Barcelona (home, `H`) vs Athletic Club
+(away, `A`), output who has the ball.
 
-## Commands
+**The output.** One CSV, `frame,label`, with exactly **199,319** rows: frames `0..199318`, in
+order. Each label is one of:
+- `H`: home in possession
+- `A`: away in possession
+- `D`: dead ball
+- `X`: abstain
 
-```bash
-pip install -r requirements.txt            # numpy + pandas: enough for scorer, validator, baseline
-pip install -r requirements-starter.txt    # adds kloppy==3.18.0, matplotlib, notebook (loaders/notebooks)
+**The scoring.** The board ranks on **spellF1**, which matches whole possessions by temporal IoU.
+**macroF1** (per-frame) is the first tie-break. The floor to beat is `baseline_smooth50`, with a
+full-match spellF1 of 0.2433. The deadline is **November 17, 2026**.
 
-python evaluation/run_evaluation.py                 # score every *.csv in evaluation/results/ vs public GT
-python evaluation/run_evaluation.py --bootstrap 1000   # confidence intervals; use before trusting any gap
-python evaluation/run_evaluation.py --results some/dir --no-detail   # score one dir, table only
-python evaluation/validate_submission.py path/to/sub.csv   # exact same checks as the official scorer
+The upstream docs are the spec. Read them in this order:
+1. `CHALLENGE.md`
+2. `DATA.md`
+3. `EVALUATION.md`
+4. `SUBMISSION.md`
+5. `RULES.md`
+6. `FAQ.md`
 
-python starter/baseline.py                  # rebuild the 4 baselines from the raw ATD (~1-2 min)
-python starter/baseline.py --window 50 100 --out some/dir
-python starter/make_dummy_submission.py     # constant-label files to exercise the loop
-python starter/load_atd.py | load_smart_tagging.py | load_homography.py   # alignment/sanity checks
-```
-
-There is no test suite, linter or build. The scorer and the validator are the checks. To score a
-single file, put it in its own folder and pass `--results`. The scorer writes `evaluation/scoreboard.csv`
-and `evaluation/reports/<name>.json` and `<name>_transitions.csv`. The transitions CSV lists every
-matched, missed or spurious transition by video frame, so it is the main error-analysis artifact.
-All of these outputs are gitignored.
+If a doc and `evaluation/possession_metrics.py` disagree, the code wins.
 
 ## Hard constraints (competition rules — breaking these disqualifies)
 
-- **Do not read, print or upload the match data to a hosted LLM.** The T&Cs (FAQ.md) forbid giving
-  the provided videos, datasets "or any extracts thereof" to any third-party hosted LLM, and Claude
-  Code is one. Do not `Read`/`cat`/`head` files under `data/`. Do not print raw tracking rows,
-  tagging entries or homography rows. Do not look at video frames. Write code that processes the
-  data locally and prints only aggregates such as scores, counts and timings. The format details
-  below come from the repo docs. They are enough to write parsers without opening the files.
+- **The match data never enters Claude's context.** The T&Cs (FAQ.md) forbid giving the provided
+  videos, datasets "or any extracts thereof" to a hosted LLM, and Claude Code is one.
+  - `.claude/settings.json` denies `Read` on `data/`.
+  - `.claude/hooks/guard_data.py` blocks shell, Read, Grep and Glob calls that touch `data/`, the
+    bundle's file names, or `MTAH_DATA_DIR`.
+  - Write scripts that process the data locally and print **aggregates only** (scores, counts,
+    distribution summaries). Never print rows or frame-level values.
+  - Run scripts without naming `data/` on the command line; `games.asset_paths()` and
+    `possession.match.load_atd()` resolve the paths.
+  - If the hook blocks something harmless, rephrase the command. Don't weaken the hook.
 - **No hand labels or hand corrections on this game, for any purpose.** That includes training,
-  validation, and constants or rules tied to specific frames of this match. Labels must come out of
-  an algorithm. Hand-labelled data from *other* games is fine.
-- **The public 5-minute GT (`evaluation/gt/…_public.csv`, frames 11185–18684, 17 possessions) only
-  checks that the pipeline is correct.** It is not training data and not a tuning set. Never pick
-  hyperparameters or choose between variants by their public score. EVALUATION.md shows the public
-  window choosing the wrong smoothing window for the baseline.
+  validation, and constants or rules tied to specific frames. Hand-labelled data about *other*
+  games is fine.
+- **The public 5-minute GT must not be used to choose anything.** The loop doesn't use it at all.
+  - Don't score candidate versions against it.
+  - Don't tune on it.
+  - Don't tune the practice set to make it agree with the published full-match baseline numbers.
+    Those numbers are derived from the private GT.
 - **No external human-produced data about this game**, such as event data or corrected tracking.
-- **Exact reproducibility.** The submission repo must regenerate the *identical* file from the data
-  bundle. Seed every source of randomness, pin dependencies, and keep the generating command documented.
-- **Never commit `data/`, video, or full-match label files.** `origin` is the user's public fork.
-  `.gitignore` already excludes `data/*`, `*.mp4`, `evaluation/results/*.csv` (except the baselines)
-  and `*.pdf`. Keep it that way.
+- **Exact reproducibility.** `python -m possession.submit` must regenerate the identical file.
+  - Seed every source of randomness.
+  - Dependencies are pinned in `requirements-lock.txt`.
+  - Run `submit --repro` before any upload.
+- **Nothing from the organisers' data goes anywhere public.** `origin` is a public fork.
+  - Never commit `data/`, video, `/devset/`, or submission CSVs.
+  - Never commit anything derived from the bundle: measured statistics, profiles, caches, or
+    figures quoted in docs, docstrings or commit messages. These belong under `data/cache/`.
+  - The figures in the upstream docs are already public and are fine to quote.
+
+## Environment
+
+The system Python (3.15) has no numpy. Use the project venv, which runs Python 3.10:
+
+```bash
+uv venv --python 3.10 .venv && uv pip install -r requirements-lock.txt   # once per checkout
+.venv/Scripts/python.exe -m possession.dev nearest                        # Windows path to the venv
+```
+
+The match bundle is unpacked in `data/` under the names `games.py` expects, and every asset for
+both sources resolves through `asset_paths()`.
+
+## The loop
+
+The objective is **pooled spellF1 on the practice set**: three of Metrica's public sample games,
+labelled from their own event data and degraded to fail the way the provided tracking fails. See
+`possession/devset/README.md` for provenance, the labelling rules and validation. The practice set
+ranks the four official baselines in the same order as the full match, at similar levels. Trust
+its spellF1, not its macroF1.
+
+```bash
+python -m possession.devset.fetch                 # once: download the sample games (~183 MB) to /devset/raw
+python -m possession.devset.profile               # once per machine: ATD noise profile (needs the bundle; stays local)
+python -m possession.devset.build [--seeds 1 2]   # build labels + degraded tracking (auto-built if missing)
+python -m possession.selfcheck                    # loader reproduces the official baselines frame for frame
+
+python -m possession.dev <approach> [key=value ...] [--seeds 1 2] [--bootstrap 1000] --note "..."
+python -m possession.submit <approach> [key=value ...] --name <team> --repro
+```
+
+To add an idea:
+1. Create `possession/approaches/<name>.py` with `DEFAULTS` and
+   `predict(match, **params) -> int8 codes`. Copy `nearest.py` to start.
+2. Add the name to `REGISTRY`.
+3. Run `dev` with a `--note` saying what you're testing.
+
+Every `dev` run is appended to `experiments/dev_log.csv` with its params and commit, so commit that
+file along with the code. A gap counts only if it clears the bootstrap interval: about ±0.018 for
+one seed, so use `--seeds 1 2` or `--bootstrap 1000` before believing one.
+
+`submit` writes `evaluation/results/<name>.csv`, runs the official validation, checks
+reproducibility and logs the SHA-256 to `experiments/submissions.csv`.
+
+**Parallel experiments in git worktrees just work.** `possession/paths.py` falls back to the main
+checkout's `data/` and `devset/raw/`. Each worktree builds its own `devset/cache/`, and the real
+match cache is written atomically. A worktree still needs its own `.venv`, created with the uv
+line above.
 
 ## Architecture
 
-**`games.py`** (stdlib only) is the single source of per-match constants and all asset paths.
-Nothing else spells out a filename. `asset_paths(source="tactical"|"broadcast")` builds the paths
-and `require([...])` returns them or raises a readable "data not found" error. `MTAH_DATA_DIR`
-relocates the bundle. `half_video_blocks("BAR-ATH")` gives the graded halves.
-- The per-half `offsets` / `halves` / `video_to_id` describe the IdFrame counter that the GT was
-  derived from. **Participants don't need them.** The ATD is already on the video timeline.
-- The local bundle's videos are named `BAR-ATH_tactical-002.mp4` and `BAR-ATH_broadcast-001.mp4`.
-  `asset_paths()["video"]` expects `BAR-ATH_tactical.mp4`, so video lookups fail until the files are
-  renamed.
+**`games.py`** (upstream, stdlib only) holds the per-match constants and all asset paths. Its
+`offsets`/`video_to_id` functions describe the counter the GT came from. Participants don't need
+them: ATD row `frame_id - 1` *is* the video frame.
 
-**`evaluation/`** holds the official scorer, unchanged from upstream. Organisers run this exact code
-against the private GT. Its key behaviours:
-- `valid_runs()` takes the graded spans from the GT's non-`X` frames: the two halves. All temporal
-  metrics run inside a run, never across halftime. Predictions on ungraded frames are ignored.
-- For spellF1, every `X` is forward-filled with the last non-`X` label in that half (back-filled at
-  the start of a half). An `X` inside a possession is free. An `X` across a hand-over carries the old
-  label forward. macroF1 counts every `X` on a graded frame as a miss.
-- A possession is a maximal run of `H` or of `A`. `D` frames split possessions: `H H D D H H` counts
-  as two. Spells are matched one-to-one and greedily, same team only, at IoU 0.3/0.4/0.5/0.6/0.7, and
-  the F1 is averaged over those thresholds.
-- Noise: macroF1 gaps under ~0.01 and spellF1 gaps under ~0.04 (full match) are not real. On the
-  17-possession public window the noise band is far wider.
+**`evaluation/`** (upstream) is the official scorer. It is byte-identical to what the organisers
+run, and the settings deny edits to it.
+- Graded spans (`valid_runs`) are the GT's non-`X` frames, i.e. the two halves. No metric crosses
+  halftime.
+- For spellF1, every `X` is forward-filled with the last label in that half. An `X` inside a
+  possession is free; an `X` across a hand-over carries the old label forward.
+- A possession is a maximal run of `H` or of `A`, so `D` splits possessions.
+- Spells are matched one-to-one at IoU 0.3–0.7, and the F1 is averaged over those thresholds.
 
-**`starter/`** contains the reference baseline and the loaders. `baseline.py` streams the raw ATD
-with numpy only: nearest tracked player to the ball, then a centred majority vote, with `D` wherever
-the ball is missing. The notebooks `01`→`03` walk through tagging, then tracking, then a first
-submission.
+**`possession/`** (ours):
+- **`match.Match`** is the one shape every approach consumes, on both the real match and the
+  practice games:
+  - `ball` (n,2) and `players` (n,k,2), in metres, `NaN` where unseen;
+  - `team` (k,), 0 home and 1 away;
+  - `runs`, the graded half-open spans;
+  - `labels`, on practice games only.
+
+  A slot is a tracklet, not a person, on both. `load_atd()` parses the raw ATD into this form in
+  about 20 s and caches it in `data/cache/`.
+- **`approaches/`** has one module per idea. `predict` sees only the `Match`, never labels or
+  paths, so the same code scores on practice games and writes the submission.
+- **`scoring.py`** imports the official metrics by path. It also provides `pooled()`, which joins
+  games with an `X` separator so each possession counts once, and the `\n`-only CSV writer that
+  makes hashes stable across operating systems.
+- **`devset/`** builds the practice set: `sources`, `labels`, `degrade`, `build`.
+  - `profile.py` measures the ATD's failure modes into `atd_profile.json` under `data/cache/`.
+    The file holds aggregates only, uses no labels, and is never committed. Rebuilding the practice
+    set needs the bundle once per machine.
+  - Bump `BUILD_VERSION` in `build.py` when labels or degradation change.
+
+**`starter/`** (upstream) holds the reference baseline and the loaders. `nearest.py` reuses
+`starter.baseline.smooth` and `team_of_each_track`.
 
 ## Data facts that bite
 
-Frame alignment to a submission row:
-- ATD `frame_id` is 1-based, so `video_frame = frame_id - 1`.
-- Homography `frame` is already a submission row.
-- Smart Tagging times are seconds from the start of the tactical video, so the frame is
-  `round(seconds * 25)`.
-- Broadcast ATD/homography use their own timeline. It is **not** aligned to tactical and no mapping
-  is provided. A file with ~164k rows indexed the broadcast by mistake.
+Frame alignment:
+- Homography `frame` and Smart Tagging `round(seconds * 25)` are already video frames.
+- Broadcast assets use their own unaligned timeline. A file with about 164k rows indexed the
+  broadcast by mistake.
 
 Graded frames:
-- Graded halves are video frames 11185–90651 and 110808–190197.
-- The 2nd half is graded from 110808 but kicks off at 113742. The 2,934 frames in between are all `D`.
+- The graded halves are video frames 11185–90651 and 110808–190197.
+- The 2nd half kicks off at 113742. The 2,934 graded frames before it are all `D`.
 
-Raw ATD (`*_atd.txt`):
-- Each line is `<frame_id>:<slot>;<slot>;...:<ball>`, with every group as `x,y,speed`.
-- `NaN` marks a missing value.
-- Coordinates are normalised 0–1. Scale by `GAMES[game]["pitch"]` (105.3 × 68.0 m) before comparing
-  distances.
+Ball (DATA.md):
+- The ball is unseen on 40.7% of graded frames.
+- It goes missing in long blackouts rather than flicker.
+- Blackouts are likelier when the ball is crowded, at a line, and before restarts.
+- `python -m possession.devset.profile` prints the measured figures locally. Don't copy them into
+  tracked files.
 
-Track slots:
-- 46 slots, no player identities.
-- `ShirtNumber` is just the slot index.
-- Slots fragment and swap identity over the match.
-- The team of each slot comes from the metadata XML. The first `<Team>` listed is home.
-
-Ball visibility: the ball is missing on 41% of graded frames, disproportionately at the interesting
-moments.
+Tracking:
+- 46 slots, about 20.5 tracked per graded frame.
+- The ATD's own speed field is dropped by the loader.
 
 Smart Tagging:
-- Tag columns are title case (`Team`) and codes are upper case. Match case-insensitively.
-- `Team` is `N/A` on 36 instances, including every throw-in.
-- Intervals are tactical phases, not possessions.
-
-Homography:
-- Maps normalised pitch 0–1 → pixels.
-- Check `valid`: when it is 0 the matrix is NaN. Tactical is 100% valid; broadcast is 65.8%.
+- Tag columns are title case and codes are upper case. Match case-insensitively.
+- `Team` is `N/A` on every throw-in.
+- Intervals are phases, not possessions.
 
 ## Code conventions
 
-Match the existing style:
-- Keep code Python 3.8-compatible: `.format()`, no f-strings or walrus.
-- Put module constants under a `# Params` comment near the top.
-- Scripts add the repo root to `sys.path` so they can `from games import ...`.
+- Match the upstream style: Python 3.8-compatible, with `.format()` and no f-strings.
+- Put module constants under `# Params`.
 - Docstrings explain *why*.
-
-Keep `evaluation/` dependent on numpy/pandas only. Don't modify the scorer to change scoring. It
-has to stay byte-identical to the official one.
+- Run modules from the repo root with `-m`.
+- `evaluation/` stays numpy/pandas only and unedited.
 
 ## Submission
 
-Validate the exact file before uploading. The deliverables are:
-- `<team_name>.csv`
-- a public code repo that reproduces it
-- a short technical doc (`<team_name>.pdf` or `.md`) covering the approach, the assets used and
-  dropped, any training data and who labelled it, the possession rules chosen, limitations, and how
-  to reproduce
+The three deliverables are:
+1. `<team_name>.csv`, from `possession.submit --repro`.
+2. A public repo that regenerates the file.
+3. A short technical document (`<team_name>.pdf` or `.md`). It must cover:
+   - the approach;
+   - the assets used and the assets dropped;
+   - training data, including who labelled it. The practice set's provenance is in
+     `possession/devset/README.md`, and Metrica must be credited;
+   - the possession rules chosen;
+   - limitations;
+   - how to reproduce the file.
 
-The deadline is **November 17, 2026**. There is no live leaderboard.
+There is no live leaderboard.

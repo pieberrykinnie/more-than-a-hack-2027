@@ -36,6 +36,12 @@ data/*
 *.gzip
 *.pl3container
 
+# -- practice set ------------------------------------------------------------------------------
+# Metrica's public sample games (possession/devset/fetch.py) and the arrays built from them. Public
+# data, but not ours to redistribute, and rebuilt byte for byte from a pinned commit anyway.
+# Anchored: possession/devset/ is the code that builds it and must stay tracked.
+/devset/
+
 # -- internal documents ---------------------------------------------------------------------------
 # OVERVIEW.md -- the institutional description of the competition -- IS committed. It is the only
 # place that explains why the format changed from 2026, and a document like that circulating by

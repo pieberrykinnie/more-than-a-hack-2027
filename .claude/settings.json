@@ -1,0 +1,24 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./data/tactical/**)",
+      "Read(./data/broadcast/**)",
+      "Read(./data/cache/**)",
+      "Edit(./evaluation/*.py)",
+      "Edit(./evaluation/gt/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell|Read|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard_data.py\""
+          }
+        ]
+      }
+    ]
+  }
+}

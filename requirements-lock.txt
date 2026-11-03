@@ -1,0 +1,8 @@
+# Exact environment that produced the submission and every score in experiments/.
+# Python 3.10.6. Recreate with:  uv venv --python 3.10 .venv && uv pip install -r requirements-lock.txt
+numpy==2.2.6
+pandas==2.3.3
+python-dateutil==3.0.0
+pytz==2026.6
+six==1.17.0
+tzdata==2026.6

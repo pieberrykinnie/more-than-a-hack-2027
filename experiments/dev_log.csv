@@ -1,0 +1,5 @@
+timestamp,approach,params,seeds,commit,spell_f1,macro_f1,spell_low,spell_high,poss,gt_poss,dur_s,gt_dur_s,per_game_spell_f1,note
+2026-11-03T04:12:15Z,nearest,"{""window"": 0}",1 2,9917f72+,0.0514,0.5311,,,9503,1736,2.1,12.2,0.0569 0.0559 0.0411 0.0631 0.0489 0.0452,baseline sweep: does the practice set rank windows sensibly
+2026-11-03T04:12:24Z,nearest,"{""window"": 25}",1 2,9917f72+,0.1989,0.5411,,,3570,1736,6.0,12.2,0.2222 0.2036 0.1906 0.2139 0.1934 0.1739,baseline sweep: does the practice set rank windows sensibly
+2026-11-03T04:12:33Z,nearest,"{""window"": 50}",1 2,9917f72+,0.2513,0.5368,,,2702,1736,8.5,12.2,0.2879 0.2715 0.2446 0.2574 0.2418 0.2123,baseline sweep: does the practice set rank windows sensibly
+2026-11-03T04:12:41Z,nearest,"{""window"": 125}",1 2,9917f72+,0.2477,0.5003,,,1880,1736,14.0,12.2,0.2817 0.2946 0.2458 0.2128 0.2330 0.2261,baseline sweep: does the practice set rank windows sensibly
